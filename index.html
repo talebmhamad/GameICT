@@ -19,9 +19,32 @@ button{border:0;border-radius:11px;padding:11px 16px;font-size:16px;font-weight:
 .overlay{display:none;text-align:center;padding:20px;border-radius:16px;background:#fff9dd;border:2px solid var(--gold);margin-top:12px}.overlay .trophy{font-size:55px}.overlay h2{font-size:32px;margin:4px}.winnerName{font-size:29px;font-weight:900;color:#9a6500}
 .countdown{position:absolute;left:50%;transform:translateX(-50%);z-index:5;font-size:90px;font-weight:900;color:var(--blue);text-shadow:0 4px 0 white;pointer-events:none}
 .leader{margin-top:12px}.leader ol{padding-left:26px}.leader li{padding:5px}.progress{height:9px;background:#e7eef6;border-radius:99px;overflow:hidden}.progress div{height:100%;background:var(--blue);width:100%;transition:width .25s}
+#app:fullscreen{max-width:none;width:100%;height:100vh;overflow:auto;padding:12px;background:linear-gradient(135deg,#eaf6ff,#f8fbff)}
+#app:fullscreen .gamewrap{grid-template-columns:minmax(0,1fr) minmax(230px,25%)}
+#app:fullscreen #maze{width:min(100%,calc((100vh - 255px)));margin:auto}
+@media(max-width:800px){#app:fullscreen .gamewrap{grid-template-columns:1fr}}
 .badge{display:inline-block;background:#eef5ff;color:#1657a3;padding:5px 9px;border-radius:99px;font-size:12px;font-weight:bold}
 @media(max-width:800px){.gamewrap{grid-template-columns:1fr}.stats{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:480px){.stats{grid-template-columns:repeat(2,1fr)}.app{padding:8px}.setup>*{width:100%}.field input,.field select{width:100%}}
+ .app{max-width:1450px}
+.gamewrap{grid-template-columns:minmax(0,1fr) 230px}
+.gamewrap>div:first-child{position:relative;padding-right:96px}
+#maze{width:100%;max-width:none;margin:auto}
+.cell{font-size:clamp(17px,2.5vw,31px)}
+.controls{position:absolute;right:5px;top:30px;display:flex;flex-direction:column;gap:12px;align-items:center}
+.controls span{display:none}
+.controls button{width:76px;height:70px;font-size:30px;touch-action:manipulation}
+#app:fullscreen .gamewrap{grid-template-columns:minmax(0,1fr) 230px}
+#app:fullscreen #maze{width:100%;max-width:none}
+#app:fullscreen .controls{position:absolute;right:5px;top:30px;display:flex;flex-direction:column}
+#app:fullscreen .controls button{height:70px}
+#app:fullscreen .side{padding-bottom:0}
+@media(max-width:800px){.gamewrap,#app:fullscreen .gamewrap{grid-template-columns:1fr}.gamewrap>div:first-child{padding-right:75px}.controls button{width:62px;height:60px}#app:fullscreen #maze{width:100%}}
+/* Keep every column, including the finish star, inside the board. */
+.gamewrap,.gamewrap>div,.mazeCard,#maze{min-width:0;max-width:100%}
+#maze{display:grid;grid-template-rows:repeat(var(--rows,6),minmax(0,1fr));aspect-ratio:var(--cols,10)/var(--rows,6);width:100%;overflow:hidden}
+#maze .cell{min-width:0;min-height:0;aspect-ratio:auto;font-size:clamp(14px,2vw,29px)}
+#app:fullscreen #maze{width:100%}
 </style>
 </head>
 <body>
@@ -32,7 +55,7 @@ button{border:0;border-radius:11px;padding:11px 16px;font-size:16px;font-weight:
  <label class="field">Student Name<input id="name" maxlength="24" placeholder="e.g. Adam"></label>
  <label class="field">Level<select id="level"><option value="1">Level 1 — Easy</option><option value="2">Level 2 — Medium</option><option value="3">Level 3 — Hard</option></select></label>
  <label class="field">Time<select id="duration"><option value="45">45 seconds</option><option value="60" selected>60 seconds</option><option value="90">90 seconds</option></select></label>
- <button class="primary" id="start">▶ START</button><button class="secondary" id="new">🔄 NEW MAZE</button><button class="danger" id="resetScores">Reset Scores</button>
+ <button class="secondary" id="fullscreen" type="button">⛶ FULL SCREEN</button> <button class="primary" id="start">▶ START</button><button class="secondary" id="new">🔄 NEW MAZE</button><button class="danger" id="resetScores">Reset Scores</button>
 </section>
 
 <section class="stats">
@@ -61,28 +84,31 @@ button{border:0;border-radius:11px;padding:11px 16px;font-size:16px;font-weight:
 <script>
 (()=>{
 const $=id=>document.getElementById(id), maze=$("maze");
-let N=7,grid=[],pos={},goal={},active=false,seconds=60,total=60,moveCount=0,score=0,timerId=null,startAt=0,scores=[];
+let N=6,C=10,grid=[],pos={},goal={},active=false,seconds=60,total=60,moveCount=0,score=0,timerId=null,startAt=0,scores=[];
 try{scores=JSON.parse(localStorage.getItem("robotMazeScores")||"[]")}catch(e){scores=[]}
 function saveScores(){try{localStorage.setItem("robotMazeScores",JSON.stringify(scores.slice(0,10)))}catch(e){}}
 function leaderboard(){let e=$("leaderboard");e.innerHTML="";if(!scores.length){e.innerHTML="<li>No winners yet — be first!</li>";return} scores.slice(0,5).forEach((s,i)=>{let li=document.createElement("li");li.textContent=`${s.name} — ${s.score} pts (${s.time}s)`;e.appendChild(li)})}
-function size(){let l=+$("level").value;return l===1?7:l===2?9:11}
+function size(){let l=+$("level").value;return l===1?6:l===2?7:8}
 function generate(){
- clearInterval(timerId);N=size();grid=Array.from({length:N},()=>Array(N).fill(1));let r=0,c=0;grid[0][0]=0;
- while(r<N-1||c<N-1){if(r===N-1)c++;else if(c===N-1)r++;else Math.random()<.5?r++:c++;grid[r][c]=0}
- let opens=Math.floor(N*N*(+$("level").value===1?.32:.24));for(let i=0;i<opens;i++){let rr=Math.floor(Math.random()*N),cc=Math.floor(Math.random()*N);grid[rr][cc]=0}
- grid[0][0]=0;grid[N-1][N-1]=0;
- let open=[];for(r=0;r<N;r++)for(c=0;c<N;c++)if(!grid[r][c]&&(r||c)&&!(r===N-1&&c===N-1))open.push([r,c]);
+ clearInterval(timerId);N=size();C=+$("level").value===1?10:+$("level").value===2?12:14;grid=Array.from({length:N},()=>Array(C).fill(1));let r=0,c=0;grid[0][0]=0;
+ while(r<N-1||c<C-1){if(r===N-1)c++;else if(c===C-1)r++;else Math.random()<.5?r++:c++;grid[r][c]=0}
+ let opens=Math.floor(N*C*(+$("level").value===1?.32:.24));for(let i=0;i<opens;i++){let rr=Math.floor(Math.random()*N),cc=Math.floor(Math.random()*C);grid[rr][cc]=0}
+ grid[0][0]=0;grid[N-1][C-1]=0;
+ let open=[];for(r=0;r<N;r++)for(c=0;c<C;c++)if(!grid[r][c]&&(r||c)&&!(r===N-1&&c===C-1))open.push([r,c]);
  open.sort(()=>Math.random()-.5);let specials=Math.min(6,+$("level").value*2);
  for(let i=0;i<specials&&i<open.length;i++){let [rr,cc]=open[i];grid[rr][cc]=i%2?3:2}
- pos={r:0,c:0};goal={r:N-1,c:N-1};active=false;moveCount=0;score=0;seconds=+$("duration").value;total=seconds;
+ pos={r:0,c:0};goal={r:N-1,c:C-1};active=false;moveCount=0;score=0;seconds=+$("duration").value;total=seconds;
  $("moves").textContent=0;$("score").textContent=0;$("timer").textContent=seconds;$("levelOut").textContent=$("level").value;$("winner").style.display="none";$("timebar").style.width="100%";$("message").textContent="Ready for the challenge?";render()
 }
-function render(){maze.style.gridTemplateColumns=`repeat(${N},1fr)`;maze.innerHTML="";for(let r=0;r<N;r++)for(let c=0;c<N;c++){let x=document.createElement("div");x.className="cell";if(grid[r][c]===1)x.classList.add("wall");if(grid[r][c]===2){x.classList.add("boost");x.textContent="⚡"}if(grid[r][c]===3){x.classList.add("trap");x.textContent="🕳️"}if(r===goal.r&&c===goal.c)x.textContent="⭐";if(r===pos.r&&c===pos.c)x.textContent="🤖✋";maze.appendChild(x)}}
+function render(){maze.style.gridTemplateColumns=`repeat(${C},minmax(0,1fr))`;maze.style.setProperty("--cols",C);maze.style.setProperty("--rows",N);maze.innerHTML="";for(let r=0;r<N;r++)for(let c=0;c<C;c++){let x=document.createElement("div");x.className="cell";if(grid[r][c]===1)x.classList.add("wall");if(grid[r][c]===2){x.classList.add("boost");x.textContent="⚡"}if(grid[r][c]===3){x.classList.add("trap");x.textContent="🕳️"}if(r===goal.r&&c===goal.c)x.textContent="⭐";if(r===pos.r&&c===pos.c)x.textContent="🤖✋";maze.appendChild(x)}}
 function beep(freq=500,d=.08){try{let A=window.AudioContext||window.webkitAudioContext;if(!A)return;let a=new A(),o=a.createOscillator(),g=a.createGain();o.frequency.value=freq;g.gain.value=.04;o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+d)}catch(e){}}
 function start(){let n=$("name").value.trim();if(!n){$("message").textContent="✏️ Enter the student's name first!";$("name").focus();return}clearInterval(timerId);pos={r:0,c:0};moveCount=0;score=0;seconds=+$("duration").value;total=seconds;$("player").textContent=n;$("moves").textContent=0;$("score").textContent=0;$("timer").textContent=seconds;$("winner").style.display="none";render();active=false;let n3=3;$("countdown").textContent=n3;beep(500);let cd=setInterval(()=>{n3--;if(n3>0){$("countdown").textContent=n3;beep(500)}else if(n3===0){$("countdown").textContent="GO!";beep(800)}else{clearInterval(cd);$("countdown").textContent="";active=true;startAt=Date.now();$("message").textContent="🚀 GO! Find the Energy Star!";timerId=setInterval(tick,1000)}},650)}
 function tick(){seconds--;if(seconds<0)seconds=0;$("timer").textContent=seconds;$("timebar").style.width=Math.max(0,seconds/total*100)+"%";if(seconds<=0){clearInterval(timerId);active=false;$("message").textContent="⏰ TIME UP! Try a new strategy.";beep(180,.25)}}
-function move(d){if(!active)return;let D={up:[-1,0],down:[1,0],left:[0,-1],right:[0,1]}[d],nr=pos.r+D[0],nc=pos.c+D[1];if(nr<0||nr>=N||nc<0||nc>=N||grid[nr][nc]===1){$("message").textContent="🚧 WALL! Debug your path.";beep(180);return}pos={r:nr,c:nc};moveCount++;score=Math.max(0,score+10);if(grid[nr][nc]===2){seconds+=5;total=Math.max(total,seconds);score+=50;grid[nr][nc]=0;$("message").textContent="⚡ ENERGY BOOST! +5 seconds";beep(850)}else if(grid[nr][nc]===3){seconds=Math.max(1,seconds-5);score=Math.max(0,score-20);grid[nr][nc]=0;$("message").textContent="🕳️ OOPS! −5 seconds";beep(220)}else $("message").textContent="🤖 Keep going!";$("moves").textContent=moveCount;$("score").textContent=score;$("timer").textContent=seconds;render();if(nr===goal.r&&nc===goal.c)win()}
+function move(d){if(!active)return;let D={up:[-1,0],down:[1,0],left:[0,-1],right:[0,1]}[d],nr=pos.r+D[0],nc=pos.c+D[1];if(nr<0||nr>=N||nc<0||nc>=C||grid[nr][nc]===1){$("message").textContent="🚧 WALL! Debug your path.";beep(180);return}pos={r:nr,c:nc};moveCount++;score=Math.max(0,score+10);if(grid[nr][nc]===2){seconds+=5;total=Math.max(total,seconds);score+=50;grid[nr][nc]=0;$("message").textContent="⚡ ENERGY BOOST! +5 seconds";beep(850)}else if(grid[nr][nc]===3){seconds=Math.max(1,seconds-5);score=Math.max(0,score-20);grid[nr][nc]=0;$("message").textContent="🕳️ OOPS! −5 seconds";beep(220)}else $("message").textContent="🤖 Keep going!";$("moves").textContent=moveCount;$("score").textContent=score;$("timer").textContent=seconds;render();if(nr===goal.r&&nc===goal.c)win()}
 function win(){active=false;clearInterval(timerId);let elapsed=((Date.now()-startAt)/1000).toFixed(1);score+=Math.max(0,Math.round(seconds*20))+Math.max(0,500-moveCount*5);$("score").textContent=score;let name=$("name").value.trim();$("winnerName").textContent=name;$("winnerStats").textContent=`Level ${$("level").value} • ${elapsed} seconds • ${moveCount} moves • ${score} points`;$("winner").style.display="block";$("message").textContent="🎉 AMAZING! Robot Hand reached the star!";beep(1000,.3);scores.push({name,score,time:elapsed});scores.sort((a,b)=>b.score-a.score);scores=scores.slice(0,10);saveScores();leaderboard()}
+const fullscreenButton=$("fullscreen");
+fullscreenButton.addEventListener("click",async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $("app").requestFullscreen()}catch(e){$("message").textContent="Full screen is unavailable in this browser."}});
+document.addEventListener("fullscreenchange",()=>{fullscreenButton.textContent=document.fullscreenElement?"⛶ EXIT FULL SCREEN":"⛶ FULL SCREEN"});
 $("start").addEventListener("click",start);$("new").addEventListener("click",generate);$("level").addEventListener("change",generate);$("duration").addEventListener("change",generate);document.querySelectorAll("[data-d]").forEach(b=>b.addEventListener("click",()=>move(b.dataset.d)));
 $("next").addEventListener("click",()=>{let l=+$("level").value;if(l<3)$("level").value=l+1;generate();start()});
 $("resetScores").addEventListener("click",()=>{scores=[];saveScores();leaderboard()});
